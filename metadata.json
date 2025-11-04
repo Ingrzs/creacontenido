@@ -1,0 +1,5 @@
+{
+  "name": "Generador de Posts con IA para Redes Sociales",
+  "description": "Una herramienta impulsada por IA para generar contenido atractivo para publicaciones en redes sociales para diversas plataformas y temas. Personaliza plantillas, elige modos de generación (manual, por tema o por tendencia) y descarga los resultados como imágenes.",
+  "requestFramePermissions": []
+}
