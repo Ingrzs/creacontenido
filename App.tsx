@@ -84,6 +84,9 @@ const App = () => {
                     ...prev,
                     niche: selectedProfile.niche,
                     subniche: selectedProfile.subniche,
+                    contentType: selectedProfile.contentType,
+                    tone: selectedProfile.tone,
+                    reaction: selectedProfile.reaction,
                 }));
             }
         }
@@ -99,6 +102,9 @@ const App = () => {
             name,
             niche: aiConfig.niche,
             subniche: aiConfig.subniche,
+            contentType: aiConfig.contentType,
+            tone: aiConfig.tone,
+            reaction: aiConfig.reaction,
         };
         // Usar la forma funcional de setState para garantizar que se basa en el estado más reciente
         setProfiles(prevProfiles => [...prevProfiles, newProfile]);
