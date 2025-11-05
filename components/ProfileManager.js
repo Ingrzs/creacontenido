@@ -34,7 +34,13 @@ export const ProfileManager = ({
     const [renamingProfile, setRenamingProfile] = useState(null);
 
     const canSave = currentAiConfig.niche && currentAiConfig.subniche;
-    const isCurrentConfigSaved = profiles.some(p => p.niche === currentAiConfig.niche && p.subniche === currentAiConfig.subniche);
+    const isCurrentConfigSaved = profiles.some(p => 
+        p.niche === currentAiConfig.niche && 
+        p.subniche === currentAiConfig.subniche &&
+        p.contentType === currentAiConfig.contentType &&
+        p.tone === currentAiConfig.tone &&
+        p.reaction === currentAiConfig.reaction
+    );
 
     const handleSaveClick = () => {
         const name = prompt("Ingresa un nombre para este perfil:", `${currentAiConfig.niche} - ${currentAiConfig.subniche}`);
