@@ -55,6 +55,14 @@ export const TONES = [
     { value: 'sugestivo_motivacional', label: 'Sugestivo / Motivacional' },
     { value: 'misterioso_inspirador', label: 'Misterioso / Inspirador' },
     { value: 'cinico_humoristico', label: 'Cínico / Humorístico' },
+    // Nuevos tonos basados en tu estrategia
+    { value: 'emocional_motivacional', label: 'Emocional / Motivacional' },
+    { value: 'ironico_humoristico', label: 'Irónico / Humorístico' },
+    { value: 'curioso_emocional', label: 'Curioso / Emocional' },
+    { value: 'polemico_critico', label: 'Polémico / Crítico' },
+    { value: 'sarcastico_doble_sentido', label: 'Sarcástico / Doble Sentido' },
+    { value: 'polemico_emocional', label: 'Polémico / Emocional' },
+    { value: 'doble_sentido_humoristico', label: 'Doble Sentido / Humorístico' },
 
     // Tonos Puros
     { value: 'humoristico', label: 'Humorístico (Puro)' },
