@@ -23,6 +23,9 @@ const postsSchema = {
     required: ["posts"]
 };
 
+// Helper para esperar
+const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 export const generatePostTextsWithAI = async (mode, config, apiKey) => {
     const ai = getAiInstance(apiKey);
     const { contentType, tone, reaction, length, quantity, topic, niche, subniche, trendTopic, trendDateFilter } = config;
@@ -70,17 +73,28 @@ El resultado debe ser un objeto JSON que siga el esquema proporcionado, sin expl
 
         apiConfig = { responseMimeType: "application/json", responseSchema: postsSchema };
         
-        const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: prompt,
-            config: apiConfig
-        });
-        const parsedJson = JSON.parse(response.text.trim());
-        if (parsedJson.posts && parsedJson.posts.length > 0) {
-            return parsedJson.posts;
-        } else {
-            throw new Error("La IA no devolvió ninguna publicación.");
+        // Intentos de Reintento para la API principal (Robustez general)
+        let lastError;
+        for (let i = 0; i < 3; i++) {
+            try {
+                const response = await ai.models.generateContent({
+                    model: "gemini-2.5-flash",
+                    contents: prompt,
+                    config: apiConfig
+                });
+                const parsedJson = JSON.parse(response.text.trim());
+                if (parsedJson.posts && parsedJson.posts.length > 0) {
+                    return parsedJson.posts;
+                } else {
+                     throw new Error("La IA devolvió una respuesta vacía.");
+                }
+            } catch (error) {
+                console.warn(`Intento ${i + 1} fallido en servicio AI:`, error);
+                lastError = error;
+                if (i < 2) await wait(1500); // Esperar antes de reintentar
+            }
         }
+        throw new Error(lastError?.message || "Error persistente al conectar con la IA.");
 
     } else if (mode === 'ai-trend') {
         let dateInstruction = '';
@@ -115,31 +129,40 @@ Devuelve tu respuesta como un único objeto JSON válido, sin formato Markdown (
         
         apiConfig = { tools: [{ googleSearch: {} }] };
 
-        const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
-            contents: prompt,
-            config: apiConfig
-        });
+        // Intentos de reintento para Tendencias
+        let lastError;
+        for (let i = 0; i < 3; i++) {
+            try {
+                const response = await ai.models.generateContent({
+                    model: "gemini-2.5-flash",
+                    contents: prompt,
+                    config: apiConfig
+                });
 
-        let jsonString = response.text.trim();
-        if (jsonString.startsWith('```json')) {
-            jsonString = jsonString.substring(7, jsonString.length - 3).trim();
-        } else if (jsonString.startsWith('```')) {
-            jsonString = jsonString.substring(3, jsonString.length - 3).trim();
-        }
+                let jsonString = response.text.trim();
+                if (jsonString.startsWith('```json')) {
+                    jsonString = jsonString.substring(7, jsonString.length - 3).trim();
+                } else if (jsonString.startsWith('```')) {
+                    jsonString = jsonString.substring(3, jsonString.length - 3).trim();
+                }
 
-        try {
-            const parsedJson = JSON.parse(jsonString);
-            if (parsedJson.posts && Array.isArray(parsedJson.posts)) {
-                return parsedJson.posts;
+                const parsedJson = JSON.parse(jsonString);
+                if (parsedJson.posts && Array.isArray(parsedJson.posts)) {
+                    return parsedJson.posts;
+                }
+            } catch (e) {
+                console.warn(`Intento ${i + 1} fallido en tendencias:`, e);
+                lastError = e;
+                // Intento de recuperación de texto plano si falla el JSON en el último intento
+                if (i === 2 && lastError) {
+                     console.error("Error final JSON tendencias:", e);
+                } else {
+                    await wait(2000);
+                }
             }
-        } catch (e) {
-            console.error("Error al parsear la respuesta JSON de la búsqueda de tendencias:", e, "Respuesta recibida:", jsonString);
-            const lines = jsonString.split('\n').filter(line => line.trim() && !line.includes('{') && !line.includes('}'));
-            if (lines.length > 0) return lines;
-            throw new Error("La respuesta de la IA sobre tendencias no pudo ser procesada.");
         }
-        throw new Error("La IA no devolvió ninguna publicación en el formato esperado.");
+        
+        throw new Error("La IA no pudo generar tendencias tras varios intentos. Intenta con un tema diferente.");
     } else {
         throw new Error("Modo de generación AI no reconocido.");
     }
