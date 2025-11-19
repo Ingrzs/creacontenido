@@ -19,6 +19,8 @@ const App = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [loadingMessage, setLoadingMessage] = useState('');
 
+    const [users, setUsers] = useState([]);
+    const [activeUserId, setActiveUserId] = useState(null);
     const [profiles, setProfiles] = useState([]);
     const [activeProfileId, setActiveProfileId] = useState(null);
 
@@ -30,35 +32,63 @@ const App = () => {
                 const data = JSON.parse(savedData);
                 setPreviewData(prev => ({ ...prev, ...data }));
             }
-            const savedProfiles = localStorage.getItem('aiConfigProfiles');
-            if (savedProfiles) {
-                setProfiles(JSON.parse(savedProfiles));
-            }
+            
             const savedApiKey = localStorage.getItem('geminiApiKey');
             if (savedApiKey) {
                 setApiKey(savedApiKey);
             }
+
+            // Cargar Usuarios y Perfiles con Migración
+            const savedUsers = localStorage.getItem('aiConfigUsers');
+            const savedProfiles = localStorage.getItem('aiConfigProfiles');
+            
+            let loadedProfiles = savedProfiles ? JSON.parse(savedProfiles) : [];
+            let loadedUsers = savedUsers ? JSON.parse(savedUsers) : [];
+
+            // Migración: Si hay perfiles pero no usuarios, crear usuario General
+            if (loadedProfiles.length > 0 && loadedUsers.length === 0) {
+                const generalUser = { id: 'general-default', name: 'General / Mi Marca' };
+                loadedUsers = [generalUser];
+                // Asignar perfiles huérfanos al usuario general
+                loadedProfiles = loadedProfiles.map(p => ({ ...p, userId: generalUser.id }));
+                
+                localStorage.setItem('aiConfigUsers', JSON.stringify(loadedUsers));
+                localStorage.setItem('aiConfigProfiles', JSON.stringify(loadedProfiles));
+            }
+
+            setUsers(loadedUsers);
+            setProfiles(loadedProfiles);
+
+            if (loadedUsers.length > 0) {
+                setActiveUserId(loadedUsers[0].id);
+            }
+
         } catch (error) {
             console.error("Falló al cargar los datos desde localStorage", error);
         }
     }, []);
 
-    // Guardar perfiles en localStorage cada vez que cambien
+    // Guardar perfiles
     useEffect(() => {
         try {
             localStorage.setItem('aiConfigProfiles', JSON.stringify(profiles));
         } catch (error) {
-            console.error("Falló al guardar los perfiles en localStorage", error);
+            console.error("Falló al guardar los perfiles", error);
         }
     }, [profiles]);
 
+    // Guardar usuarios
+    useEffect(() => {
+        try {
+            localStorage.setItem('aiConfigUsers', JSON.stringify(users));
+        } catch (error) {
+            console.error("Falló al guardar los usuarios", error);
+        }
+    }, [users]);
+
     const handleApiKeyChange = (key) => {
         setApiKey(key);
-        try {
-            localStorage.setItem('geminiApiKey', key);
-        } catch (error) {
-            console.error("Falló al guardar la API Key en localStorage", error);
-        }
+        localStorage.setItem('geminiApiKey', key);
     };
 
     const handlePreviewDataChange = useCallback((key, value) => {
@@ -75,6 +105,32 @@ const App = () => {
         });
     }, []);
 
+    // User Management
+    const handleAddUser = (name) => {
+        const newUser = { id: crypto.randomUUID(), name };
+        setUsers(prev => [...prev, newUser]);
+        setActiveUserId(newUser.id);
+        setActiveProfileId(null);
+    };
+
+    const handleSelectUser = (userId) => {
+        setActiveUserId(userId);
+        setActiveProfileId(null);
+        const userHasProfiles = profiles.some(p => p.userId === userId);
+        if (generationMode === 'ai-mix' && !userHasProfiles) {
+            setGenerationMode('manual');
+        }
+    };
+
+    const handleDeleteUser = (userId) => {
+        setUsers(prev => prev.filter(u => u.id !== userId));
+        setProfiles(prev => prev.filter(p => p.userId !== userId));
+        if (activeUserId === userId) {
+            setActiveUserId(users.length > 1 ? users.find(u => u.id !== userId).id : null);
+        }
+    };
+
+    // Profile Management
     const handleSelectProfile = (profileId) => {
         setActiveProfileId(profileId);
         if (profileId) {
@@ -93,12 +149,17 @@ const App = () => {
     };
 
     const handleSaveProfile = (name) => {
+        if (!activeUserId) {
+            alert("Debes crear o seleccionar un Usuario/Marca primero.");
+            return;
+        }
         if (!aiConfig.niche || !aiConfig.subniche) {
             alert("Por favor, selecciona un nicho y un subnicho para guardar el perfil.");
             return;
         }
         const newProfile = {
             id: crypto.randomUUID(),
+            userId: activeUserId,
             name,
             niche: aiConfig.niche,
             subniche: aiConfig.subniche,
@@ -106,13 +167,11 @@ const App = () => {
             tone: aiConfig.tone,
             reaction: aiConfig.reaction,
         };
-        // Usar la forma funcional de setState para garantizar que se basa en el estado más reciente
         setProfiles(prevProfiles => [...prevProfiles, newProfile]);
         setActiveProfileId(newProfile.id);
     };
 
     const handleDeleteProfile = (profileId) => {
-        // Usar la forma funcional de setState
         setProfiles(prevProfiles => prevProfiles.filter(p => p.id !== profileId));
         if (activeProfileId === profileId) {
             setActiveProfileId(null);
@@ -120,7 +179,6 @@ const App = () => {
     };
 
     const handleRenameProfile = (profileId, newName) => {
-        // Usar la forma funcional de setState
         setProfiles(prevProfiles => 
             prevProfiles.map(p => 
                 p.id === profileId ? { ...p, name: newName } : p
@@ -138,7 +196,36 @@ const App = () => {
 
         try {
             let texts = [];
-            if (generationMode.startsWith('ai')) {
+            
+            if (generationMode === 'ai-mix') {
+                // Mix Mode Logic
+                const userProfiles = profiles.filter(p => p.userId === activeUserId);
+                if (userProfiles.length === 0) {
+                    alert("No tienes perfiles guardados para este usuario. Crea perfiles primero para usar el Modo Mix.");
+                    setIsLoading(false);
+                    return;
+                }
+
+                setLoadingMessage(`Generando mix de ${userProfiles.length} perfiles...`);
+                
+                const promises = userProfiles.map(profile => {
+                    const configForProfile = { 
+                        ...profile, 
+                        quantity: 1,
+                        length: aiConfig.length, 
+                        topic: aiConfig.topic 
+                    };
+                    return generatePostTextsWithAI('ai-topic', configForProfile, apiKey)
+                        .catch(e => {
+                            console.error(`Error for profile ${profile.name}:`, e);
+                            return [`Error generando para ${profile.name}`];
+                        });
+                });
+
+                const results = await Promise.all(promises);
+                texts = results.flat();
+
+            } else if (generationMode.startsWith('ai')) {
                 setLoadingMessage('Generando textos con IA...');
                 texts = await generatePostTextsWithAI(generationMode, aiConfig, apiKey);
             } else {
@@ -165,18 +252,7 @@ const App = () => {
             console.error("Error al generar posts:", error);
             let errorMessage = "Ocurrió un error inesperado al contactar la IA.";
             if (error instanceof Error) {
-                const lowerCaseMessage = error.message.toLowerCase();
-                if (lowerCaseMessage.includes('api key not valid') || lowerCaseMessage.includes('api_key_invalid')) {
-                    errorMessage = "Tu API Key no es válida. Por favor, revísala e inténtalo de nuevo.";
-                } else if (lowerCaseMessage.includes('permission denied') || lowerCaseMessage.includes('billing')) {
-                    errorMessage = "Permiso denegado. Asegúrate de que tu API Key esté habilitada y que la facturación esté configurada para tu proyecto.";
-                } else if (lowerCaseMessage.includes('quota')) {
-                    errorMessage = "Has excedido tu cuota de uso. Por favor, revisa tus límites en Google AI Studio o espera un momento.";
-                } else if (lowerCaseMessage.includes('fetch failed') || lowerCaseMessage.includes('networkerror')) {
-                    errorMessage = "Error de red. No se pudo conectar con el servicio de IA. Revisa tu conexión a internet.";
-                } else {
-                    errorMessage = "Ocurrió un error al generar el contenido. Inténtalo de nuevo.";
-                }
+               errorMessage = error.message;
             }
             alert(errorMessage);
         } finally {
@@ -208,18 +284,7 @@ const App = () => {
             );
         } catch (error) {
             console.error("Error al buscar imagen:", error);
-            let errorMessage = "No se pudo encontrar una imagen. Por favor, inténtalo de nuevo.";
-            if (error instanceof Error) {
-                const lowerCaseMessage = error.message.toLowerCase();
-                if (lowerCaseMessage.includes('api key not valid') || lowerCaseMessage.includes('api_key_invalid')) {
-                    errorMessage = "Tu API Key no es válida. Por favor, revísala e inténtalo de nuevo.";
-                } else if (lowerCaseMessage.includes('rpc failed') || lowerCaseMessage.includes('networkerror') || lowerCaseMessage.includes('fetch failed')) {
-                    errorMessage = "Ocurrió un error de comunicación con el servidor de IA. Esto puede ser un problema temporal. Por favor, inténtalo de nuevo en unos momentos.";
-                } else {
-                     errorMessage = "Ocurrió un error al buscar la imagen. Inténtalo de nuevo.";
-                }
-            }
-            alert(errorMessage);
+            alert("Error al buscar imagen");
             setGeneratedPosts(currentPosts =>
                 currentPosts.map(p =>
                     p.id === postId ? { ...p, isSearchingImages: false } : p
@@ -251,6 +316,8 @@ const App = () => {
         }
     };
 
+    const activeUserProfiles = profiles.filter(p => p.userId === activeUserId);
+
     return (
         React.createElement('div', { className: "min-h-screen bg-gray-900 text-gray-200" },
             isLoading && React.createElement(Loader, { message: loadingMessage }),
@@ -270,7 +337,14 @@ const App = () => {
                         setApiKey: handleApiKeyChange,
                         onGenerate: handleGeneratePosts,
                         isLoading: isLoading,
-                        profiles: profiles,
+                        
+                        users: users,
+                        activeUserId: activeUserId,
+                        onAddUser: handleAddUser,
+                        onSelectUser: handleSelectUser,
+                        onDeleteUser: handleDeleteUser,
+
+                        profiles: activeUserProfiles,
                         activeProfileId: activeProfileId,
                         onSelectProfile: handleSelectProfile,
                         onSaveProfile: handleSaveProfile,
