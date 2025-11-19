@@ -215,11 +215,26 @@ const App = () => {
                         length: aiConfig.length, 
                         topic: aiConfig.topic 
                     };
-                    return generatePostTextsWithAI('ai-topic', configForProfile, apiKey)
-                        .catch(e => {
-                            console.error(`Error for profile ${profile.name}:`, e);
-                            return [`Error generando para ${profile.name}`];
-                        });
+                    
+                    // REINTENTOS AUTOMÁTICOS
+                    const attemptGeneration = async (retryCount = 0) => {
+                        try {
+                            return await generatePostTextsWithAI('ai-topic', configForProfile, apiKey);
+                        } catch (error) {
+                            if (retryCount < 3) {
+                                // Espera exponencial: 1.5s, 3s, 6s
+                                const delay = 1500 * Math.pow(2, retryCount);
+                                console.warn(`Reintentando perfil ${profile.name} (Intento ${retryCount + 1}/3) en ${delay}ms...`);
+                                await new Promise(resolve => setTimeout(resolve, delay));
+                                return attemptGeneration(retryCount + 1);
+                            }
+                            console.error(`Error definitivo para perfil ${profile.name}:`, error);
+                            // Fallback si todo falla
+                            return [`(No se pudo generar para ${profile.name}. Intenta de nuevo)`];
+                        }
+                    };
+
+                    return attemptGeneration();
                 });
 
                 const results = await Promise.all(promises);

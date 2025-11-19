@@ -209,27 +209,37 @@ const App = () => {
 
                 setLoadingMessage(`Generando mix de ${userProfiles.length} perfiles...`);
                 
-                // Ejecutar secuencialmente o en paralelo. 
-                // Secuencial es más seguro para rate-limits, paralelo es más rápido.
-                // Usaremos Promise.all para velocidad, pero ten cuidado con el límite de tokens.
                 const promises = userProfiles.map(profile => {
-                    // Forzamos cantidad 1 para cada perfil en el mix
                     const configForProfile = { 
                         ...profile, 
                         quantity: 1,
-                        length: aiConfig.length, // Usamos la longitud global seleccionada
-                        topic: aiConfig.topic // Usamos el tema global si hay
+                        length: aiConfig.length, 
+                        topic: aiConfig.topic 
                     };
-                    // Reutilizamos la función 'ai-topic' ya que el mix se basa en temas de perfil
-                    return generatePostTextsWithAI('ai-topic', configForProfile, apiKey)
-                        .catch(e => {
-                            console.error(`Error generando para perfil ${profile.name}:`, e);
-                            return [`Error generando para ${profile.name}`];
-                        });
+                    
+                    // REINTENTOS AUTOMÁTICOS
+                    const attemptGeneration = async (retryCount = 0) => {
+                        try {
+                            return await generatePostTextsWithAI('ai-topic', configForProfile, apiKey);
+                        } catch (error) {
+                            if (retryCount < 3) {
+                                // Espera exponencial: 1.5s, 3s, 6s
+                                const delay = 1500 * Math.pow(2, retryCount);
+                                console.warn(`Reintentando perfil ${profile.name} (Intento ${retryCount + 1}/3) en ${delay}ms...`);
+                                await new Promise(resolve => setTimeout(resolve, delay));
+                                return attemptGeneration(retryCount + 1);
+                            }
+                            console.error(`Error definitivo para perfil ${profile.name}:`, error);
+                            // Fallback si todo falla
+                            return [`(No se pudo generar para ${profile.name}. Intenta de nuevo)`];
+                        }
+                    };
+
+                    return attemptGeneration();
                 });
 
                 const results = await Promise.all(promises);
-                texts = results.flat(); // Aplanar el array de arrays
+                texts = results.flat();
 
             } else if (generationMode.startsWith('ai')) {
                 setLoadingMessage('Generando textos con IA...');
@@ -258,7 +268,6 @@ const App = () => {
             console.error("Error al generar posts:", error);
             let errorMessage = "Ocurrió un error inesperado al contactar la IA.";
             if (error instanceof Error) {
-                // Manejo de errores básicos
                 if (error.message.includes('429')) errorMessage = "Has superado la cuota de la API. Espera un minuto.";
                 else errorMessage = error.message;
             }
