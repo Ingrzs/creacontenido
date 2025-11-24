@@ -16,7 +16,7 @@ const ControlSection = (props) => (
     )
 );
 
-const UserManager = ({ users, activeUserId, onAddUser, onSelectUser, onDeleteUser }) => {
+const UserManager = ({ users, activeUserId, onAddUser, onUpdateUser, onSelectUser, onDeleteUser }) => {
     const [isCreating, setIsCreating] = useState(false);
     const [newUserName, setNewUserName] = useState('');
 
@@ -34,29 +34,49 @@ const UserManager = ({ users, activeUserId, onAddUser, onSelectUser, onDeleteUse
          }
     };
 
+    // Obtener datos del usuario activo para el campo de identidad
+    const activeUser = users.find(u => u.id === activeUserId);
+
     return (
-        React.createElement('div', { className: "space-y-2" },
-            React.createElement(Label, null, "Cuenta / Marca Activa"),
-            !isCreating ? (
-                React.createElement('div', { className: "flex gap-2" },
-                    React.createElement(Select, { value: activeUserId || '', onChange: (e) => onSelectUser(e.target.value) },
-                        users.length === 0 && React.createElement('option', { value: "" }, "Crea un usuario..."),
-                        users.map(u => React.createElement('option', { key: u.id, value: u.id }, u.name))
-                    ),
-                    React.createElement(Button, { variant: "secondary", onClick: () => setIsCreating(true), className: "!px-3" }, "+"),
-                    users.length > 0 && React.createElement(Button, { variant: "secondary", onClick: handleDeleteClick, className: "bg-red-900 hover:bg-red-800 !px-3" }, "✕")
+        React.createElement('div', { className: "space-y-4" },
+            React.createElement('div', { className: "space-y-2" },
+                React.createElement(Label, null, "Cuenta / Marca Activa"),
+                !isCreating ? (
+                    React.createElement('div', { className: "flex gap-2" },
+                        React.createElement(Select, { value: activeUserId || '', onChange: (e) => onSelectUser(e.target.value) },
+                            users.length === 0 && React.createElement('option', { value: "" }, "Crea un usuario..."),
+                            users.map(u => React.createElement('option', { key: u.id, value: u.id }, u.name))
+                        ),
+                        React.createElement(Button, { variant: "secondary", onClick: () => setIsCreating(true), className: "!px-3" }, "+"),
+                        users.length > 0 && React.createElement(Button, { variant: "secondary", onClick: handleDeleteClick, className: "bg-red-900 hover:bg-red-800 !px-3" }, "✕")
+                    )
+                ) : (
+                    React.createElement('div', { className: "flex gap-2" },
+                        React.createElement(Input, { 
+                            value: newUserName, 
+                            onChange: (e) => setNewUserName(e.target.value), 
+                            placeholder: "Nombre de marca o cliente",
+                            autoFocus: true,
+                            onKeyDown: (e) => e.key === 'Enter' && handleAddClick()
+                        }),
+                        React.createElement(Button, { onClick: handleAddClick, className: "whitespace-nowrap" }, "OK"),
+                        React.createElement(Button, { variant: "secondary", onClick: () => setIsCreating(false) }, "X")
+                    )
                 )
-            ) : (
-                React.createElement('div', { className: "flex gap-2" },
-                    React.createElement(Input, { 
-                        value: newUserName, 
-                        onChange: (e) => setNewUserName(e.target.value), 
-                        placeholder: "Nombre de marca o cliente",
-                        autoFocus: true,
-                        onKeyDown: (e) => e.key === 'Enter' && handleAddClick()
-                    }),
-                    React.createElement(Button, { onClick: handleAddClick, className: "whitespace-nowrap" }, "OK"),
-                    React.createElement(Button, { variant: "secondary", onClick: () => setIsCreating(false) }, "X")
+            ),
+            
+            // Sección de Identidad (Sólo si hay un usuario seleccionado)
+            activeUser && (
+                React.createElement('div', { className: "pt-2 border-t border-gray-700" },
+                    React.createElement(Label, null, "Identidad / Personalidad (Opcional)"),
+                    React.createElement('p', { className: "text-xs text-gray-400 mb-2" }, "Describe quién habla. Ej: 'Soy un albañil tosco pero romántico', 'Soy una tía chismosa'."),
+                    React.createElement(Textarea, {
+                        value: activeUser.personaDescription || '',
+                        onChange: (e) => onUpdateUser(activeUserId, { personaDescription: e.target.value }),
+                        placeholder: "Define la voz y personalidad de esta marca aquí...",
+                        rows: 3,
+                        className: "text-sm"
+                    })
                 )
             )
         )
@@ -68,7 +88,7 @@ export const Controls = ({
     aiConfig, setAiConfig, onGenerate, isLoading,
     profiles, activeProfileId, onSelectProfile, onSaveProfile, onDeleteProfile, onRenameProfile,
     apiKey, setApiKey,
-    users, activeUserId, onAddUser, onSelectUser, onDeleteUser
+    users, activeUserId, onAddUser, onUpdateUser, onSelectUser, onDeleteUser
 }) => {
     
     const [tooltip, setTooltip] = useState('');
@@ -122,6 +142,7 @@ export const Controls = ({
                     users: users,
                     activeUserId: activeUserId,
                     onAddUser: onAddUser,
+                    onUpdateUser: onUpdateUser,
                     onSelectUser: onSelectUser,
                     onDeleteUser: onDeleteUser
                 })
