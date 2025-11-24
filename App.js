@@ -47,7 +47,7 @@ const App = () => {
 
             // Migración: Si hay perfiles pero no usuarios, crear usuario General
             if (loadedProfiles.length > 0 && loadedUsers.length === 0) {
-                const generalUser = { id: 'general-default', name: 'General / Mi Marca' };
+                const generalUser = { id: 'general-default', name: 'General / Mi Marca', personaDescription: '' };
                 loadedUsers = [generalUser];
                 loadedProfiles = loadedProfiles.map(p => ({ ...p, userId: generalUser.id }));
                 localStorage.setItem('aiConfigUsers', JSON.stringify(loadedUsers));
@@ -105,11 +105,15 @@ const App = () => {
 
     // Gestión de Usuarios
     const handleAddUser = (name) => {
-        const newUser = { id: crypto.randomUUID(), name };
+        const newUser = { id: crypto.randomUUID(), name, personaDescription: '' };
         setUsers(prev => [...prev, newUser]);
         setActiveUserId(newUser.id);
         // Al cambiar de usuario, reseteamos el perfil activo
         setActiveProfileId(null);
+    };
+
+    const handleUpdateUser = (userId, updates) => {
+        setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...updates } : u));
     };
 
     const handleSelectUser = (userId) => {
@@ -197,6 +201,10 @@ const App = () => {
 
         try {
             let texts = [];
+
+            // Obtener la identidad del usuario activo
+            const activeUser = users.find(u => u.id === activeUserId);
+            const userPersona = activeUser?.personaDescription || '';
             
             if (generationMode === 'ai-mix') {
                 // Lógica del Modo Mix
@@ -207,14 +215,15 @@ const App = () => {
                     return;
                 }
 
-                setLoadingMessage(`Generando mix de ${userProfiles.length} perfiles...`);
+                setLoadingMessage(`Generando mix de ${userProfiles.length} perfiles con identidad...`);
                 
                 const promises = userProfiles.map(profile => {
                     const configForProfile = { 
                         ...profile, 
                         quantity: 1,
                         length: aiConfig.length, 
-                        topic: aiConfig.topic 
+                        topic: aiConfig.topic,
+                        persona: userPersona // Pasar identidad
                     };
                     
                     // REINTENTOS AUTOMÁTICOS
@@ -243,7 +252,9 @@ const App = () => {
 
             } else if (generationMode.startsWith('ai')) {
                 setLoadingMessage('Generando textos con IA...');
-                texts = await generatePostTextsWithAI(generationMode, aiConfig, apiKey);
+                // Inyectar identidad en la configuración normal
+                const configWithPersona = { ...aiConfig, persona: userPersona };
+                texts = await generatePostTextsWithAI(generationMode, configWithPersona, apiKey);
             } else {
                 setLoadingMessage('Preparando posts manuales...');
                 texts = manualText.split('\n').filter(text => text.trim() !== '');
@@ -360,6 +371,7 @@ const App = () => {
                         users: users,
                         activeUserId: activeUserId,
                         onAddUser: handleAddUser,
+                        onUpdateUser: handleUpdateUser,
                         onSelectUser: handleSelectUser,
                         onDeleteUser: handleDeleteUser,
 
