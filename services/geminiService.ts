@@ -28,9 +28,23 @@ const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const generatePostTextsWithAI = async (mode, config, apiKey) => {
     const ai = getAiInstance(apiKey);
-    const { contentType, tone, reaction, length, quantity, topic, niche, subniche, trendTopic, trendDateFilter } = config;
+    const { contentType, tone, reaction, length, quantity, topic, niche, subniche, trendTopic, trendDateFilter, persona } = config;
 
-    const personaInstruction = "Actúa como un copywriter profesional experto en contenido viral para redes sociales. Usa siempre un lenguaje natural, coloquial, similar al español que se habla en México. Evita palabras demasiado formales o rebuscadas.";
+    // DEFINICIÓN DE LA IDENTIDAD (PERSONA)
+    let personaInstruction = "Actúa como un copywriter profesional experto en contenido viral para redes sociales. Usa siempre un lenguaje natural, coloquial, similar al español que se habla en México. Evita palabras demasiado formales o rebuscadas.";
+    
+    // Si el usuario tiene una identidad definida, la inyectamos con alta prioridad
+    if (persona && persona.trim() !== '') {
+        personaInstruction = `IMPORTANTE: Tu IDENTIDAD Y PERSONALIDAD es la siguiente: "${persona}".
+        
+        Instrucciones de Personalidad:
+        - Debes pensar, escribir y expresarte EXACTAMENTE como la persona descrita arriba.
+        - Usa su vocabulario, su jerga, su visión del mundo y su tono de voz característico.
+        - NO rompas el personaje en ningún momento.
+        - Si la personalidad es informal o "de barrio", escribe así. Si es técnica, escribe así.
+        
+        Además de tu personalidad, actúa como un experto creador de contenido viral.`;
+    }
 
     const lengthMap = {
         'muy corto': '12 palabras',
